@@ -9,9 +9,13 @@ GEN uses gene embedding vectors as input data, so it could increase the represen
 
 ## Requirements
 pytorch >= 1.8.0
+
 conda install pyg -c pyg
+
 pip install scipy
+
 conda install -c anaconda scikit-learn
+
 conda install hickle
 
 ## The results
