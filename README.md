@@ -4,12 +4,13 @@ Gene Embedding based feedforward Neural networks
 ## The overview
 GEN is a prediction model for cancer drug responses and achieves SOTA performance in cancer drug response tasks. 
 GEN uses gene embedding vectors as input data, so it could increase the representative power of genes.
-
+![Figure1](https://user-images.githubusercontent.com/31497898/168000623-d27ddd17-9705-4e9f-80de-18bf75eaa3b1.JPG)
 <img src = "https://user-images.githubusercontent.com/31497898/167999496-caa9b1e6-09cd-4a8d-ade2-33a72e94579b.jpg" width="600" height="800">
 
 ![Figure1@100x-100](https://user-images.githubusercontent.com/31497898/164617420-5c813d9f-9ccb-4783-b492-805daf8ead2a.jpg)
 
 ## Requirements
+
 pytorch >= 1.8.0
 
 conda install pyg -c pyg
