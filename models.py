@@ -334,6 +334,56 @@ class Main_Encoder(nn.Module):
         y = self.dropout(self.layer_norm1(y))
         
         return y
+    
+class GEN_WO_GeneVec(torch.nn.Module):
+    def __init__(self,gcn = None, gexpr_dim=100, dropout_drug = 0.1, dropout_cell = 0.1,
+                 dropout_reg = 0.1, d_dim = 128*3, y_dim = 512):#
+        super().__init__()
+        self.d_dim = d_dim
+        self.y_dim = y_dim
+        self.gcn = gcn
+        
+        self.fc_d1 = nn.Linear(d_dim,y_dim)
+        self.fc_d2 = nn.Linear(y_dim,y_dim)
+        self.activation = GELU() 
+        
+        self.fc_g1 = nn.Linear(gexpr_dim,y_dim)
+        self.fc_g2 = nn.Linear(y_dim,y_dim)
+        
+        self.layer_norm1 = nn.LayerNorm(y_dim*2)
+        self.dropout_drug = nn.Dropout(dropout_drug)
+        self.dropout_cell = nn.Dropout(dropout_cell)
+        
+        self.regression = nn.Sequential(
+                nn.Linear(self.y_dim*2, 512),
+                nn.ELU(),
+                nn.Dropout(p=dropout_reg),
+                nn.Linear(512, 512),
+                nn.ELU(),
+                nn.Dropout(p=dropout_reg),
+                nn.Linear(512, 1)
+            )
+        
+    def forward(self,x_feat=None,x_adj=None,x_gexpr=None):
+        x = self.gcn(x_feat)
+        
+        x = self.fc_d1(x)
+        x = self.activation(x)
+        x = self.dropout_drug(x)
+        x = self.fc_d2(x)
+        
+        x_gexpr = self.fc_g1(x_gexpr)
+        x_gexpr = self.activation(x_gexpr) 
+        x_gexpr = self.dropout_cell(x_gexpr) 
+        x_gexpr = self.fc_g2(x_gexpr)
+        
+        x = torch.cat([x,x_gexpr], dim=1) #Concatenate()([x,x_gexpr])
+        x = self.layer_norm1(x)
+        
+        y = self.regression(x)
+        
+        return y
+
 
 class GNN_drug(torch.nn.Module):
     def __init__(self, layer_drug, dim_drug, do):

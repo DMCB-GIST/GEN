@@ -13,52 +13,23 @@ from sklearn.metrics import r2_score, roc_auc_score, mean_squared_error
 from utils import *
 from models import *
 
-gene_vocab = pd.read_csv('./data/compact_gene_vocabulary.csv',sep=',') 
-vocab_size = gene_vocab.shape[0]
+#gene_vocab = pd.read_csv('./data/compact_gene_vocabulary.csv',sep=',') 
+#vocab_size = gene_vocab.shape[0]
 
 cuda_condition = torch.cuda.is_available()
-device = torch.device("cuda:0" if cuda_condition else "cpu")
+device = torch.device("cuda:1" if cuda_condition else "cpu")
     
-tokenizer = Tokenizer(gene_vocab,shuf =True)
+#tokenizer = Tokenizer(gene_vocab,shuf =True)
 
-threshold = None
-personalized_genes = False
-random_genes = False
-
-Trans_FC = False
-Trans_MFC = False
-Trans = True
-FC = False
-MFC = False
-
-if Trans_FC:
-    name = 'Trans_FC'
-    C_EnC = 'SimpleFC'
-    D_EnC = 'SimpleFC'
-elif Trans_MFC:
-    name = 'Trans_MFC'
-    C_EnC = 'MixedFC'
-    D_EnC = 'MixedFC'
-elif Trans:
-    name = 'Trans'
-    C_EnC = None
-    D_EnC = None
-elif MFC:
-    name = 'MixedFC'
-elif FC:
-    name = 'Simple_FC'
-    
+use_DeepCDR = True
+use_GEN = False
 
 nb_epoch=250
+lr = 0.0001
 
-gnn_dropout = 0.3
+gcn_dropout = 0.3
 att_dropout = 0.3
 fc_dropout = 0.3
-
-nGenes = 300
-lr = 0.0001
-embed_size = 64
-batch_size = 64
 
 heads = 1
 layer_drug = 3
@@ -67,38 +38,39 @@ nhid = layer_drug*dim_drug
  
 att_dim = 512
 
-    
-title = name+'_Adim_'+str(att_dim)+'_Ddim_'+str(dim_drug)+'_nGenes_'+str(nGenes)+'_GNN_do'+str(gnn_dropout)+'_att_do_'+str(att_dropout)+'_lr_'+str(lr)
-if not(personalized_genes):
-    threshold = 4.72
+#threshold = 8.1 # genes 64
+#threshold = 6.3
 
+threshold = 4.72
+batch_size = 64
+
+    
 Gene_expression_file = './data/GDSC_micro.BrainArray.RMAlog2Average.ENTREZID.Expr_renamed.tsv'
 Drug_info_file = './data/1.Drug_listMon Jun 24 09_00_55 2019.csv'
 Drug_feature_file = './data/drug_graph_feat'
+drugid2pubchemid, drug_pubchem_id_set, gexpr_feature, drug_feature, experiment_data = get_drug_cell_info(Drug_info_file,Drug_feature_file,
+                                                                                                         Gene_expression_file,
+                                                                                                         norm = False,threshold = threshold)
 
-drugid2pubchemid, drug_pubchem_id_set, gexpr_feature, _, experiment_data = get_drug_cell_info(Drug_info_file,Drug_feature_file,
-                                                                                              Gene_expression_file,
-                                                                                              norm = False, threshold = threshold)
-if not personalized_genes:
+if threshold == 4.72:
     gexpr_feature = gexpr_feature.T[:300].T
-    nGenes = gexpr_feature.shape[1]
-    title = 'Fixed6_'+name+'_Adim_'+str(att_dim)+'_Ddim_'+str(dim_drug)+'_nGenes_'+str(nGenes)+'_GNN_do'+str(gnn_dropout)+'_att_do_'+str(att_dropout)+'_lr_'+str(lr)
-
-gexpr_feature.columns = gexpr_feature.columns.values.astype(str)
-overlapped_genes = set(gene_vocab['ENTREZID']).intersection(gexpr_feature.columns)    
-gexpr_feature = gexpr_feature[overlapped_genes]
-
-over_under_ids_df, over_under_genes_df = get_gene_set(tokenizer, gexpr_feature, nGenes, random_genes)
 
 data_idx = get_idx(drugid2pubchemid, drug_pubchem_id_set, gexpr_feature,experiment_data)
 
 drug_dict = np.load('./data/new_drug_feature_graph.npy', allow_pickle=True).item()
 
-input_df = get_gnn_input_df(data_idx,drug_dict,gexpr_feature,over_under_ids_df,over_under_genes_df)
+input_df = get_simple_input_df(data_idx,drug_feature,gexpr_feature, drug_dict = drug_dict)
 
 input_df = input_df[input_df['drug id'] != '84691']
-
+input_df = input_df.reset_index(drop=True)
 all_samples =  gexpr_feature.index
+
+nGenes = gexpr_feature.shape[1]
+
+if use_DeepCDR:
+    title = 'DeepCDR_GIN2_nGenes_'+str(nGenes)
+elif use_GEN:
+    title = 'GEN_WO_GeneVec_Adim_'+str(att_dim)+'_Ddim_'+str(dim_drug)+'_nGenes_'+str(nGenes)+'_GNN_do'+str(gcn_dropout)+'_att_do_'+str(att_dropout)+'_lr_'+str(lr)
 
 save_path = './weights/'
 img_path = './imgs/'
@@ -113,6 +85,7 @@ total_test_r2 = []
 total_train_losses = []
 total_test_losses = []
 total_val_losses = []
+
 
 from sklearn.model_selection import ShuffleSplit
 ss = ShuffleSplit(n_splits=5, test_size=0.2)
@@ -129,50 +102,30 @@ for train1_index, test1_index in split1:
     fold = 0 
     for train2_index, test2_index in split2:
         fold += 1
-            
+        
         train2_index, val2_index = train_test_split(train2_index, test_size=0.05)
         train_df = input_df.iloc[train2_index].reset_index(drop=True)
         val_df = input_df.iloc[val2_index].reset_index(drop=True)
         test_df = input_df.iloc[test2_index].reset_index(drop=True)
             
-            
-        train_dataloader = get_gnn_dataloader(train_df, batch_size=batch_size)
-        validation_dataloader = get_gnn_dataloader(val_df, batch_size=batch_size)
-        test_dataloader = get_gnn_dataloader(test_df, batch_size=batch_size)
+        train_dataloader = get_gnn_dataloader(train_df, batch_size=batch_size,simple = True)
+        validation_dataloader = get_gnn_dataloader(val_df, batch_size=batch_size,simple = True)
+        test_dataloader = get_gnn_dataloader(test_df, batch_size=batch_size,simple = True)
         
-        gene_embedding = Gene_Embedding(vocab_size= vocab_size,embed_size=embed_size)
+        gcn = GNN_drug(layer_drug = layer_drug, dim_drug = dim_drug, do=gcn_dropout)
         
-        gnn = GNN_drug(layer_drug = layer_drug, dim_drug = dim_drug, do = gnn_dropout)
-        
-        if Trans_MFC or Trans_FC or Trans:
-            cell_encoder = Transformer_Encoder(genes = nGenes, x_dim= embed_size, y_dim = att_dim, 
-                                               dropout = att_dropout, encoder = C_EnC)
+        if use_DeepCDR:
+            model = DeepCDR_GIN(gcn = gcn, gexpr_dim=nGenes, dropout =fc_dropout, gnn_dim = nhid)
             
-            drug_encoder = Transformer_Encoder(genes = nGenes, x_dim= nhid, y_dim = att_dim, 
-                                               dropout = att_dropout, encoder = D_EnC)
-        elif FC:
-            cell_encoder = SimpleFC_Encoder(x_dim= embed_size, y_dim = att_dim, dropout = att_dropout)
+        elif use_GEN:
+            model = GEN_WO_GeneVec(gcn = gcn, gexpr_dim=nGenes, dropout_drug = gcn_dropout,
+                                   dropout_cell = att_dropout, dropout_reg = fc_dropout,
+                                   d_dim = nhid, y_dim = att_dim)
             
-            drug_encoder = SimpleFC_Encoder(x_dim= nhid, y_dim = att_dim, dropout = att_dropout)
-            
-        elif MFC:
-            cell_encoder = MixedFC_Encoder(genes = nGenes, x_dim= embed_size, y_dim = att_dim, 
-                                           dropout = att_dropout)
-            
-            drug_encoder = MixedFC_Encoder(genes = nGenes, x_dim= nhid, y_dim = att_dim, 
-                                           dropout = att_dropout)
-        
-        encoder = Main_Encoder(cell_encoder = cell_encoder, d_dim = nhid, 
-                               genes=nGenes, y_dim=att_dim, dropout = att_dropout)
-        
-        model = GEN(y_dim = att_dim*2, dropout_ratio = fc_dropout,
-                 gnn = gnn, embedding = gene_embedding, encoder = encoder)
-
         model.to(device)
-        optimizer = optim.Adam(model.parameters(), lr=lr) #0.0001
+        optimizer = optim.Adam(model.parameters(), lr= lr)
         mse = nn.MSELoss()
-        #lr_scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lambda epoch: 0.99 ** epoch)
-        
+
         train_pcc = []
         val_pcc = []
         test_pcc = []
@@ -181,49 +134,43 @@ for train1_index, test1_index in split1:
         val_r2 = []
         test_r2 = []
         
-        best_pcc = 0
+        best_r2 = 0
         train_loss = []
         test_loss = []
         val_loss = []
         
         for ep in range(nb_epoch):
+            
             true_Y = []
             pred_Y = []
             
-            
             model.train()
-            for step, (x_drug, x_genes, x_gexpr, y) in enumerate(train_dataloader):
+            for step, (x_drug, x_gexpr,y) in enumerate(train_dataloader):
                 if len(y) >1:
                     optimizer.zero_grad()
-                    
+                    x_gexpr = x_gexpr.to(device).float()
                     x_drug = x_drug.to(device)
-                    x_gexpr = x_gexpr.to(device)
-                    x_genes = x_genes.to(device)
                     y = y.to(device).float()
                     
-                    pred_y = model(x_drug,x_gexpr, x_genes)
-                    
+                    pred_y = model(x_feat =  x_drug, x_gexpr = x_gexpr)
                     loss = mse(pred_y.view(-1),y)
-                    
                     loss.backward()
                     optimizer.step()
                     
+                    #total_loss += loss.item()
                     pred_y = pred_y.view(-1).detach().cpu().numpy()
                     y = y.detach().cpu().numpy()
                     
                     true_Y += list(y)
                     pred_Y += list(pred_y)
                     
-                if (step+1) %500 ==0:
-                    print(title)
-                    print("training step: ", step)
-                    print("step_training loss: ", loss.item())
                     overall_pcc = pearsonr(pred_y,y)[0]
-                    print("The overall Pearson's correlation is %.4f."%overall_pcc)
-                    
-            
-            #lr_scheduler.step()
-            
+                    if (step+1) %500 ==0:
+                        print(title)
+                        print("training step: ", step)
+                        print("step_training loss: ", loss.item())
+                        print("The overall Pearson's correlation is %.4f."%overall_pcc)
+                
             loss_train = mean_squared_error(true_Y, pred_Y)
             pcc_train = pearsonr(true_Y, pred_Y)[0]
             r2_train = r2_score(true_Y, pred_Y)
@@ -235,21 +182,19 @@ for train1_index, test1_index in split1:
             train_loss.append(loss_train)
             train_r2.append(r2_train)
             
-            total_val_loss = 0.
-            sum_pcc = 0.
             true_Y = []
             pred_Y = []
             
             model.eval()
-            for step, (x_drug, x_genes, x_gexpr, y) in enumerate(validation_dataloader):
+            for step, (x_drug, x_gexpr,y) in enumerate(validation_dataloader):
                 if len(y) >1:
+                    optimizer.zero_grad()
+                    x_gexpr = x_gexpr.to(device).float()
                     x_drug = x_drug.to(device)
-                    x_gexpr = x_gexpr.to(device)
-                    x_genes = x_genes.to(device)
                     y = y.to(device).float()
                     
-                    pred_y = model(x_drug,x_gexpr, x_genes)
-           
+                    pred_y = model(x_feat =  x_drug, x_gexpr = x_gexpr)
+                    
                     loss = mse(pred_y.view(-1),y)
                     
                     pred_y = pred_y.view(-1).detach().cpu().numpy()
@@ -258,12 +203,10 @@ for train1_index, test1_index in split1:
                     true_Y += list(y)
                     pred_Y += list(pred_y)
                     
-                    total_val_loss += loss.item()
-                    
             
-            loss_val = mean_squared_error(true_Y, pred_Y)
-            pcc_val = pearsonr(true_Y, pred_Y)[0]
-            r2_val = r2_score(true_Y, pred_Y)
+            loss_val = mean_squared_error(true_Y,pred_Y)
+            pcc_val = pearsonr(true_Y,pred_Y)[0]
+            r2_val = r2_score(true_Y,pred_Y)
             
             print("Validation avg_loss: ", loss_val)
             print("Validation avg_pcc: ", pcc_val)
@@ -272,35 +215,34 @@ for train1_index, test1_index in split1:
             val_pcc.append(pcc_val)
             val_r2.append(r2_val)
             
-            if best_pcc < val_r2[-1]:
-                best_pcc = val_r2[-1]
-                torch.save(model.state_dict(),save_path+title+'.pt')
-                print('Best Val r2 ', best_pcc)
-                
+            if best_r2 < val_r2[-1]:
+                best_r2 = val_r2[-1]
+                torch.save(model.state_dict(), save_path+title+'.pt')
+                print('Best r2', best_r2)
+            
             true_Y = []
             pred_Y = []
             
             model.eval()
-            
-            for step, (x_drug, x_genes, x_gexpr, y) in enumerate(test_dataloader):
+            for step, (x_drug, x_gexpr,y) in enumerate(test_dataloader):
                 if len(y) >1:
+                    x_gexpr = x_gexpr.to(device).float()
                     x_drug = x_drug.to(device)
-                    x_gexpr = x_gexpr.to(device)
-                    x_genes = x_genes.to(device)
                     y = y.to(device).float()
                     
-                    pred_y = model(x_drug,x_gexpr, x_genes)
+                    pred_y = model(x_feat =  x_drug, x_gexpr = x_gexpr)
+                    
                     loss = mse(pred_y.view(-1),y)
-                        
+                    
                     pred_y = pred_y.view(-1).detach().cpu().numpy()
                     y = y.detach().cpu().numpy()
-                    
                     true_Y += list(y)
                     pred_Y += list(pred_y)
                     
-            loss_test = mean_squared_error(true_Y, pred_Y)
-            pcc_test = pearsonr(true_Y, pred_Y)[0]
-            r2_test = r2_score(true_Y, pred_Y)
+            
+            loss_test = mean_squared_error(true_Y,pred_Y)
+            pcc_test = pearsonr(true_Y,pred_Y)[0]
+            r2_test = r2_score(true_Y,pred_Y)
             
             print("Test avg_loss: ", loss_test)
             print("Test avg_pcc: ", pcc_test)
@@ -309,7 +251,7 @@ for train1_index, test1_index in split1:
             test_pcc.append(pcc_test)
             test_loss.append(loss_test)
             test_r2.append(r2_test)
-                
+            
             if (ep+1) %50 ==0:
                 input_title = 'Fold_'+str(main_fold)+'X'+str(fold)+'_Loss_'+title
                 show_picture(train_loss,val_loss, test_loss, input_title)
@@ -323,40 +265,35 @@ for train1_index, test1_index in split1:
             
         model.load_state_dict(torch.load(save_path+title+'.pt'))
         torch.save(model.state_dict(), save_path+title+'_final.pt')
-        true_Y = []
-        pred_Y = []
+        all_y = []
+        all_pred_y = []
+        sum_loss = 0.0
+        count = 0
         
         model.eval()
-        
-        for step, (x_drug, x_genes, x_gexpr, y) in enumerate(test_dataloader):
+        for step, (x_drug, x_gexpr,y) in enumerate(test_dataloader):
             if len(y) >1:
+                x_gexpr = x_gexpr.to(device).float()
                 x_drug = x_drug.to(device)
-                x_gexpr = x_gexpr.to(device)
-                x_genes = x_genes.to(device)
                 y = y.to(device).float()
-                
-                pred_y = model(x_drug,x_gexpr, x_genes)
+                    
+                pred_y = model(x_feat =  x_drug, x_gexpr = x_gexpr)
+                    
                 loss = mse(pred_y.view(-1),y)
                     
                 pred_y = pred_y.view(-1).detach().cpu().numpy()
                 y = y.detach().cpu().numpy()
-                
                 true_Y += list(y)
                 pred_Y += list(pred_y)
-                
-                    
-        loss_test = mean_squared_error(true_Y, pred_Y)
-        pcc_test = pearsonr(true_Y, pred_Y)[0]
-        r2_test = r2_score(true_Y, pred_Y)
+        
+        loss_test = mean_squared_error(true_Y,pred_Y)
+        pcc_test = pearsonr(true_Y,pred_Y)[0]
+        r2_test = r2_score(true_Y,pred_Y)
         
         print("Test avg_loss: ", loss_test)
         print("Test avg_pcc: ", pcc_test)
         print("Test r2: ", r2_test)
-        
-        test_pcc.append(pcc_test)
-        test_loss.append(loss_test)
-        test_r2.append(r2_test)
-        
+            
         input_title = 'Fold_'+str(main_fold)+'X'+str(fold)+'_Loss_'+title
         show_picture(train_loss,val_loss, test_loss, input_title,path=img_path, save=True)
         input_title = 'Fold_'+str(main_fold)+'X'+str(fold)+'_PCC_'+title
@@ -366,15 +303,14 @@ for train1_index, test1_index in split1:
         
         total_train_pcc.append(train_pcc)
         total_val_pcc.append(val_pcc)
+        total_test_pcc.append(pcc_test)
         
         total_train_r2.append(train_r2)
         total_val_r2.append(val_r2)
+        total_test_r2.append(r2_test)
         
         total_train_losses.append(train_loss)
         total_val_losses.append(val_loss)     
-        
-        total_test_pcc.append(pcc_test)
-        total_test_r2.append(r2_test)
         total_test_losses.append(loss_test)
 
         df_test_pcc = pd.DataFrame(data = total_test_pcc)
@@ -386,4 +322,4 @@ for train1_index, test1_index in split1:
         df_test_r2.to_csv(result_path+'Fold_'+str(main_fold)+'_'+title+'_r2.csv')
         
         df_test_losses.to_csv(result_path+'Fold_'+str(main_fold)+'_'+title+'_loss.csv')
-    
+  
