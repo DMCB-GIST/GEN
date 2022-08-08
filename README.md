@@ -24,7 +24,6 @@ conda install hickle
 
 ## The results
 ![tSNE](https://user-images.githubusercontent.com/31497898/183337464-d2933a2b-dcfa-4d3b-b186-88d91c0e2cd8.PNG)
-
-![tSNE-100](https://user-images.githubusercontent.com/31497898/183337088-c4c550dd-ca18-4c36-995b-3c1aae59846c.jpg)
+(a), (b), (c), and (d) are the t-SNE plots of encoding vectors of GENs trained on the GDSC. In (a) and (c), all methods are more clustered than (b) and (d); especially, the cases of FC in the same gene set are most clustered.
 
 ![table1](https://user-images.githubusercontent.com/31497898/169188961-95831aca-c075-404e-a99a-eb2454cc5706.PNG)
