@@ -24,5 +24,6 @@ conda install hickle
 
 ## The results
 
-![Figure3@100x-100](https://user-images.githubusercontent.com/31497898/164617578-49100f85-2c8a-4a7e-aa16-029ff4fcc7e0.jpg)
+![tSNE-100](https://user-images.githubusercontent.com/31497898/183337088-c4c550dd-ca18-4c36-995b-3c1aae59846c.jpg)
+
 ![table1](https://user-images.githubusercontent.com/31497898/169188961-95831aca-c075-404e-a99a-eb2454cc5706.PNG)
