@@ -17,6 +17,10 @@ GEN uses gene embedding vectors as input data, so it could increase the represen
 
 (a) and (b) show the workflows of GEN and a conventional method for predicting cancer drug responses, respectively. The workflows are divided into three main stages: the setup stage, the sample representation stage, and the prediction stage, where S and g respectively denote samples and genes. In the final prediction stage, a drug embedding vector is concatenated with the sample embedding vector, and ${\hat{y}}$ represents the predicted drug response value for the given sample.
 
+## Results
+![image](https://github.com/DMCB-GIST/GEN/assets/31497898/77169084-6fb1-4620-bf58-71a718747d39)
+
+
 ## Requirements
 
 pytorch >= 1.8.0
